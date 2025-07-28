@@ -1,26 +1,4 @@
 {
-    "expenses": [
-        {
-            "id": 1,
-            "date": "2025-07-29",
-            "description": "paneer",
-            "amount": 100.0,
-            "category": "food"
-        },
-        {
-            "id": 2,
-            "date": "2025-07-29",
-            "description": "chole",
-            "amount": 200.0,
-            "category": "food"
-        },
-        {
-            "id": 3,
-            "date": "2025-07-29",
-            "description": "paneer",
-            "amount": 3.0,
-            "category": "transport"
-        }
-    ],
+    "expenses": [],
     "budget": {}
 }
