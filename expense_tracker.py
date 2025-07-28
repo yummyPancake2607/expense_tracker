@@ -7,15 +7,15 @@ def load_expenses():
     if os.path.exists('expenses.json') and os.path.getsize('expenses.json') > 0:  # Check if file exists and is not empty
         with open('expenses.json', 'r') as file:
             return json.load(file)
-    return []  # Return an empty list if the file is empty or doesn't exist
+    return {"expenses": [], "budget": {}}  # Return an empty list and budget dictionary if the file is empty or doesn't exist
 
 # Function to save expenses to the JSON file
-def save_expenses(expenses):  # Fixed: Added 'expenses' parameter
+def save_expenses(expenses_data):  # Modified to take a dictionary that includes expenses and budget
     with open("expenses.json", "w") as file:
-        json.dump(expenses, file, indent=4)
+        json.dump(expenses_data, file, indent=4)
 
 # Function to add a new expense with error handling
-def add_expense(description, amount):
+def add_expense(description, amount, category, month):
     # Check if description is empty
     if not description:
         print("Provide a description")
@@ -26,38 +26,60 @@ def add_expense(description, amount):
         print("How are you printing -ve amount?")
         return
 
-    # Load existing expenses from JSON file
-    expenses = load_expenses()
+    # Load existing expenses and budget from JSON file
+    data = load_expenses()
+    expenses = data["expenses"]
+    budget = data["budget"]
+
+    # Check if the current month's expense exceeds the budget
+    if month in budget and (sum(expense['amount'] for expense in expenses if expense['date'].split('-')[1] == str(month).zfill(2)) + amount) > budget[month]:
+        print(f"Warning: You are exceeding your budget for month {month}!")
+        return
 
     # Create the new expense
     expense = {
         "id": len(expenses) + 1,  # Generate new unique ID
         "date": str(datetime.now().date()),  # Current date
         "description": description,
-        "amount": amount
+        "amount": amount,
+        "category": category
     }
 
     # Add new expense to the list
     expenses.append(expense)
 
-    # Save the updated list of expenses
-    save_expenses(expenses)
+    # Save the updated list of expenses and the budget
+    data["expenses"] = expenses
+    save_expenses(data)
     print(f"Expense added successfully (ID: {expense['id']})")
 
-# Function to list all expenses
-def list_expenses():
-    expenses = load_expenses()  # Fixed: Added parentheses to call load_expenses()
+# Function to list all expenses, with optional category filter
+def list_expenses(category=None):
+    expenses_data = load_expenses()
+    expenses = expenses_data["expenses"]
+
     if not expenses:
         print("No expenses found!")
-    else:
-        print("\nID  Date       Description  Amount")
-        for expense in expenses:
-            # Fixed: Corrected print formatting to use single quotes for keys
-            print(f"{expense['id']}  {expense['date']}  {expense['description']}   ${expense['amount']}")
+        return
+
+    # If a category is provided, filter the expenses
+    if category:
+        expenses = [expense for expense in expenses if expense['category'].lower() == category.lower()]
+
+    if not expenses:
+        print(f"No expenses found for category '{category}'!")
+        return
+
+    # Printing the formatted list of expenses
+    print("\nID   Date       Description  Amount  Category")
+    print("-" * 50)  # Line separator for better readability
+    for expense in expenses:
+        print(f"{expense['id']: <5} {expense['date']}  {expense['description']: <15} ${expense['amount']: >7.2f}  {expense['category']}")
 
 # Function to delete an expense by ID
 def delete_expense(expense_id):
-    expenses = load_expenses()
+    expenses_data = load_expenses()
+    expenses = expenses_data["expenses"]
 
     # Find the expense by ID
     expense_to_delete = None
@@ -68,35 +90,62 @@ def delete_expense(expense_id):
 
     if expense_to_delete:
         expenses.remove(expense_to_delete)
-        save_expenses(expenses)
+        expenses_data["expenses"] = expenses
+        save_expenses(expenses_data)
         print(f"Expense with ID {expense_id} deleted successfully.")
     else:
         print(f"Expense with ID {expense_id} not found.")
 
-# Function to see summary of all expenses
-def summary_expenses(month =None):
-    expenses = load_expenses()
+# Function to see summary of all expenses or by category, with budget info
+def summary_expenses(month=None, category=None):
+    expenses_data = load_expenses()
+    expenses = expenses_data["expenses"]
+    budget = expenses_data["budget"]
     total = 0
     if not expenses:
-        print("No expeneses found!")
+        print("No expenses found!")
         return
+
+    # Filter by month if provided
     if month:
-        filtered_expenses = [expense for expense in expenses if expense['date'].split('-')[1] == str(month).zfill(2)]
-        if filtered_expenses:
-            total = sum(expense['amount'] for expense in filtered_expenses)
-            print(f"\nSummary for month {month}:")
-            for expense in filtered_expenses:
-                print(f"{expense['id']}  {expense['date']}  {expense['description']}   ${expense['amount']}")
-            print(f"\nTotal for month {month}: ${total:.2f}")
-        else:
-            print(f"No expenses found for month {month}!")
-    else:
-        # Calculate the total for all expenses
-        total = sum(expense['amount'] for expense in expenses)
-        print("\nSummary of all expenses:")
+        expenses = [expense for expense in expenses if expense['date'].split('-')[1] == str(month).zfill(2)]
+
+    # Filter by category if provided
+    if category:
+        expenses = [expense for expense in expenses if expense['category'].lower() == category.lower()]
+
+    if expenses:
+        print("\nID   Date       Description  Amount  Category")
+        print("-" * 50)
         for expense in expenses:
-            print(f"{expense['id']}  {expense['date']}  {expense['description']}   ${expense['amount']}")
-        print(f"\nTotal expenses: ${total:.2f}")
+            print(f"{expense['id']: <5} {expense['date']}  {expense['description']: <15} ${expense['amount']: >7.2f}  {expense['category']}")
+        total = sum(expense['amount'] for expense in expenses)
+        if month:
+            print(f"\nTotal for month {month}: ${total:.2f}")
+        elif category:
+            print(f"\nTotal for category {category}: ${total:.2f}")
+        else:
+            print(f"\nTotal expenses: ${total:.2f}")
+    else:
+        print(f"No expenses found for the given filters!")
+
+    # Display budget for the month if available
+    if month in budget:
+        print(f"Budget for month {month}: ${budget[month]:.2f}")
+        print(f"Remaining budget: ${budget[month] - total:.2f}")
+    else:
+        print(f"No budget set for month {month}.")
+
+# Function to set a budget for a month
+def set_budget(month, amount):
+    expenses_data = load_expenses()
+    budget = expenses_data["budget"]
+    
+    # Set or update the budget for the month
+    budget[month] = amount
+    expenses_data["budget"] = budget
+    save_expenses(expenses_data)
+    print(f"Budget for month {month} set to ${amount:.2f}")
 
 # Main function to interact with the user
 def main():
@@ -106,25 +155,32 @@ def main():
         print("2. List expenses")
         print("3. Delete expense")
         print("4. Summary")
-        print("5. Exit")
+        print("5. Set budget")
+        print("6. Exit")
 
         try:
             # User chooses an option
-            choice = input("Enter your choice (1/2/3/4/5): ")
+            choice = input("Enter your choice (1/2/3/4/5/6): ")
 
             # Option 1: Add expense
             if choice == "1":
                 description = input("Enter expense description: ")
                 try:
                     amount = float(input("Enter expense amount: "))
+                    category = input("Enter expense category (e.g., Food, Transport, Utilities): ")
+                    month = input("Enter month (numeric): ")
+                    add_expense(description, amount, category, month)
                 except ValueError:
                     print("Please provide a valid number for the amount.")
                     continue
-                add_expense(description, amount)
 
             # Option 2: List expenses
             elif choice == "2":
-                list_expenses()
+                category = input("Enter category to filter by (or press enter to list all): ")
+                if category:
+                    list_expenses(category)
+                else:
+                    list_expenses()
 
             # Option 3: Delete expense
             elif choice == "3":
@@ -137,17 +193,27 @@ def main():
             # Option 4: View summary of expenses
             elif choice == "4":
                 month_input = input("Enter the month to view summary (or press enter to view all): ")
+                category_input = input("Enter category to view summary (or press enter to view all): ")
                 if month_input:
                     try:
                         month = int(month_input)
-                        summary_expenses(month)
+                        summary_expenses(month, category_input)
                     except ValueError:
                         print("Invalid month. Please enter a valid number.")
                 else:
-                    summary_expenses()
+                    summary_expenses(category=category_input)
 
-            # Option 5: Exit
+            # Option 5: Set a budget for a month
             elif choice == "5":
+                try:
+                    month = input("Enter the month to set the budget for (numeric): ")
+                    budget = float(input("Enter the budget amount: "))
+                    set_budget(month, budget)
+                except ValueError:
+                    print("Invalid budget amount. Please enter a valid number.")
+
+            # Option 6: Exit
+            elif choice == "6":
                 print("Exiting...")
                 break
 
